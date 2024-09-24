@@ -716,21 +716,31 @@ class Cursor:
         while self.current_char is not None:
             if self.current_char.isdigit() or self.current_char == "_":
                 self.advance()
+            elif self.current_char in ('e', 'E'):
+                break
             else:
+                self.diagnostics.error(
+                    f"illegal digit in decimal literal '{self.text[self.pos:self.pos + 1]}'",
+                    SourceLocation.from_tuple(
+                        self.filepath, get_line_column(self.text, self.pos)
+                    ),
+                    LEXICAL_CATEGORY,
+                )
+                self.eat_while(lambda x: x.isdigit() or x.isalpha() or x == '_')
                 break
 
     def consume_decimal_fraction(self):
         if self.current_char == ".":
             self.advance()
         else:
-            raise Exception("")
+            raise Exception("Cannot find decimal fraction")
         self.consume_decimal_fragment()
 
     def consume_decimal_exponent(self):
         if self.current_char in ("e", "E"):
             self.advance()
         else:
-            raise Exception("")
+            raise Exception("Cannot find decimal exponent")
 
         if self.current_char == "-":
             self.advance()
@@ -740,14 +750,14 @@ class Cursor:
         if self.current_char == ".":
             self.advance()
         else:
-            raise Exception("")
+            raise Exception("Cannot find hexadecimal fraction")
         self.consume_hexadecimal_digits()
 
     def consume_hexadecimal_exponent(self):
         if self.current_char in ("p", "P"):
             self.advance()
         else:
-            raise Exception("")
+            raise Exception("Cannot find hexadecimal exponent")
 
         if self.current_char == "-":
             self.advance()
@@ -757,11 +767,23 @@ class Cursor:
         if is_hex_char(self.current_char):
             self.advance()
         else:
-            raise Exception("")
+            raise Exception("Cannot find hexadecimal digits")
         while self.current_char is not None:
             if is_hex_char(self.current_char) or self.current_char == "_":
                 self.advance()
+            elif self.current_char == '.':
+                break
+            elif self.current_char in ('p', 'P'):
+                break
             else:
+                self.diagnostics.error(
+                    f"illegal digit in hexadecimal literal '{self.text[self.pos:self.pos + 1]}'",
+                    SourceLocation.from_tuple(
+                        self.filepath, get_line_column(self.text, self.pos)
+                    ),
+                    LEXICAL_CATEGORY,
+                )
+                self.eat_while(lambda x: x.isdigit() or x.isalpha() or x == '_')
                 break
 
     def consume_decimal_literal(self):
@@ -773,6 +795,8 @@ class Cursor:
                 self.advance()
             elif self.current_char == "_" and allow_underline:
                 self.advance()
+            elif self.current_char == '.':
+                break
             elif self.current_char in ('e', 'E'):
                 break
             else:
@@ -794,7 +818,7 @@ class Cursor:
             if self.current_char in ('0', '1'):
                 self.advance()
             while self.current_char is not None:
-                if self.current_char in ('0', '1'):
+                if self.current_char in ('0', '1', '_'):
                     self.advance()
                 else:
                     self.diagnostics.error(
@@ -804,6 +828,8 @@ class Cursor:
                         ),
                         LEXICAL_CATEGORY,
                     )
+                    self.eat_while(lambda x: x.isdigit() or x == '_')
+                    break
         elif literal_type == "OctalLiteral":
             if is_oct_char(self.current_char):
                 self.advance()
@@ -818,6 +844,8 @@ class Cursor:
                         ),
                         LEXICAL_CATEGORY,
                     )
+                    self.eat_while(lambda x: x.isdigit() or x == '_')
+                    break
         elif literal_type == "HexadecimalLiteral":
             if is_hex_char(self.current_char):
                 self.advance()
@@ -832,6 +860,8 @@ class Cursor:
                         ),
                         LEXICAL_CATEGORY,
                     )
+                    self.eat_while(lambda x: x.isdigit() or x == '_')
+                    break
         else:
             raise Exception("Invalid integer literal type.")
 
