@@ -41,10 +41,15 @@ class Token:
         self.start_pos = start_pos  # Start position of the token
         self.end_pos = end_pos      # End position of the token
 
+    def __eq__(self, other):
+        if not isinstance(other, Token):
+            return False
+        return (self.type, self.value, self.start_pos, self.end_pos) == (other.type, other.value, other.start_pos, other.end_pos)
+    
     def __repr__(self):
         if self.value is not None:
-            return f"Token({self.type}, {self.value!r})"
-        return f"Token({self.type})"
+            return f"Token({self.type}, {self.value!r}, {self.start_pos}, {self.end_pos})"
+        return f"Token({self.type}, {self.value!r}, {self.start_pos}, {self.end_pos})"
 
 class Cursor:
     def __init__(self, text):
