@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cjlang"
+version = "0.0.1"
+description = "Pure Python Cangjie parser and tools"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "numpy", "pydantic", "requests", "rich>=10.0.0", "shortuuid", "torch",
+    "transformers", "tenacity>=8.2.2",
+]
+
+[project.optional-dependencies]
+dev = ["black==23.3.0", "pylint==2.8.2"]
+
+[project.urls]
+"Homepage" = "https://github.com/jstzwj/cjlang"
+"Bug Tracker" = "https://github.com/jstzwj/cjlang/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["assets*", "benchmark*", "docs", "dist*", "playground*", "scripts*", "tests*"]
+
+[tool.wheel]
+exclude = ["assets*", "benchmark*", "docs", "dist*", "playground*", "scripts*", "tests*"]
