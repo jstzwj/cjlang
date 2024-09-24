@@ -19,7 +19,7 @@ class TestLexerSimple(unittest.TestCase):
             Token("COLON", None, 10, 11),
             Token("IDENTIFIER", "Int32", 12, 17),
             Token("ASSIGN", None, 18, 19),
-            Token("NUMBER", 32, 20, 22),
+            Token("DecimalLiteral", "32", 20, 22),
             Token("LINE_COMMENT", None, 23, 75),
             Token("EOF", None, None, None),
         ]
