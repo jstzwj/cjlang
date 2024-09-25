@@ -3,6 +3,7 @@ from typing import Literal, Optional
 
 from cjlang.diagnostics.diagnostic import SourceLocation, get_line_column
 from cjlang.diagnostics.engine import DiagnosticEngine
+from cjlang.utils.unicode_xid import is_xid_continue, is_xid_start
 
 
 KEYWORDS = [
@@ -92,6 +93,41 @@ CONTEXTUAL_KEYWORDS = [
 LEXICAL_CATEGORY = "Lexical Issue"
 
 
+def is_whitespace(c):
+    # This is Pattern_White_Space.
+    #
+    # Note that this set is stable (ie, it doesn't change with different
+    # Unicode versions), so it's ok to just hard-code the values.
+    return c in {
+        # Usual ASCII suspects
+        '\u0009',   # \t
+        '\u000A',   # \n
+        '\u000B',   # vertical tab
+        '\u000C',   # form feed
+        '\u000D',   # \r
+        '\u0020',   # space
+        # NEXT LINE from latin1
+        '\u0085',
+        # Bidi markers
+        '\u200E',   # LEFT-TO-RIGHT MARK
+        '\u200F',   # RIGHT-TO-LEFT MARK
+        # Dedicated whitespace characters from Unicode
+        '\u2028',   # LINE SEPARATOR
+        '\u2029'    # PARAGRAPH SEPARATOR
+    }
+
+def is_id_start(c):
+    # This is XID_Start OR '_' (which formally is not a XID_Start).
+    return c == '_' or is_xid_start(c)
+
+def is_id_continue(c):
+    return is_xid_continue(c)
+
+def is_ident(string):
+    chars = iter(string)
+    start = next(chars, None)
+    return start is not None and is_id_start(start) and all(is_id_continue(c) for c in chars)
+
 def is_hex_char(char: str) -> bool:
     char = char.upper()
     return char.isdigit() or ("A" <= char <= "F")
@@ -152,13 +188,13 @@ class Cursor:
             self.advance()
 
     def skip_whitespace(self):
-        while self.current_char is not None and self.current_char.isspace():
+        while self.current_char is not None and is_whitespace(self.current_char):
             self.advance()
 
     def tokenize(self):
         tokens = []
         while self.current_char is not None:
-            if self.current_char.isspace():
+            if is_whitespace(self.current_char):
                 self.skip_whitespace()
                 continue
 
@@ -992,9 +1028,11 @@ class Cursor:
         """Consume an identifier (which may also include numbers after the first character)."""
         start_pos = self.pos
         id_str = ""
-        while self.current_char is not None and (
-            self.current_char.isalnum() or self.current_char == "_"
-        ):
+        if self.current_char is not None and is_id_start(self.current_char):
+            id_str += self.current_char
+            self.advance()
+
+        while self.current_char is not None and is_id_continue(self.current_char):
             id_str += self.current_char
             self.advance()
         return self.create_token("IDENTIFIER", id_str, start_pos, self.pos)
