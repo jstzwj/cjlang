@@ -16,25 +16,21 @@ from typing import Tuple, List
 
 UNICODE_VERSION: Tuple[int, int, int] = (16, 0, 0)
 
-import bisect
 def bsearch_range_table(c: str, r: list[tuple[str, str]]) -> bool:
-    def cmp(lo_hi):
-        lo, hi = lo_hi
-        # Similar logic as in the Rust code: 
-        # if `lo` is greater than `c`, return 1 (equivalent to `Greater`)
-        # if `hi` is less than `c`, return -1 (equivalent to `Less`)
-        # otherwise, return 0 (equivalent to `Equal`)
+    low, high = 0, len(r) - 1
+
+    while low <= high:
+        mid = (low + high) // 2
+        lo, hi = r[mid]
+        
         if lo > c:
-            return 1
+            high = mid - 1
         elif hi < c:
-            return -1
+            low = mid + 1
         else:
-            return 0
+            return True  # Found the character in the range
 
-    index = bisect.bisect_left(r, (c, c), key=cmp)
-    # Check if the result is valid and the found range includes `c`
-    return index < len(r) and r[index][0] <= c <= r[index][1]
-
+    return False  # Character not found in any range
 
 XID_Continue_table : List[Tuple[str, str]] = [
         ('\U00000030', '\U00000039'), ('\U00000041', '\U0000005a'), ('\U0000005f', '\U0000005f'),
