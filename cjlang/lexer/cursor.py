@@ -123,11 +123,6 @@ def is_id_start(c):
 def is_id_continue(c):
     return is_xid_continue(c)
 
-def is_ident(string):
-    chars = iter(string)
-    start = next(chars, None)
-    return start is not None and is_id_start(start) and all(is_id_continue(c) for c in chars)
-
 def is_hex_char(char: str) -> bool:
     char = char.upper()
     return char.isdigit() or ("A" <= char <= "F")
