@@ -13,8 +13,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-    "numpy", "pydantic", "requests", "rich>=10.0.0", "shortuuid", "torch",
-    "transformers", "tenacity>=8.2.2",
+    "numpy", "rich>=10.0.0", "shortuuid"
 ]
 
 [project.optional-dependencies]

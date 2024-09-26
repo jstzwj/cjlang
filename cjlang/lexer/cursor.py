@@ -3,92 +3,8 @@ from typing import Literal, Optional
 
 from cjlang.diagnostics.diagnostic import SourceLocation, get_line_column
 from cjlang.diagnostics.engine import DiagnosticEngine
+from cjlang.keywords import OPERATOR_CHARACTERS
 from cjlang.utils.unicode_xid import is_xid_continue, is_xid_start
-
-
-KEYWORDS = [
-    "as",
-    "break",
-    "Bool",
-    "case",
-    "catch",
-    "class",
-    "const",
-    "continue",
-    "Rune",
-    "do",
-    "else",
-    "enum",
-    "extend",
-    "for",
-    "from",
-    "func",
-    "false",
-    "finally",
-    "foreign",
-    "Float16",
-    "Float32",
-    "Float64",
-    "if",
-    "in",
-    "is",
-    "init",
-    "inout",
-    "import",
-    "interface",
-    "Int8",
-    "Int16",
-    "Int32",
-    "Int64",
-    "IntNative",
-    "let",
-    "mut",
-    "main",
-    "macro",
-    "match",
-    "Nothing",
-    "operator",
-    "prop",
-    "package",
-    "quote",
-    "return",
-    "spawn",
-    "super",
-    "static",
-    "struct",
-    "synchronized",
-    "try",
-    "this",
-    "true",
-    "type",
-    "throw",
-    "This",
-    "unsafe",
-    "Unit",
-    "UInt8",
-    "UInt16",
-    "UInt32",
-    "UInt64",
-    "UIntNative",
-    "var",
-    "VArray",
-    "where",
-    "while",
-]
-
-CONTEXTUAL_KEYWORDS = [
-    "abstract",
-    "open",
-    "override",
-    "private",
-    "protected",
-    "public",
-    "redef",
-    "get",
-    "set",
-    "sealed",
-]
-
 
 LEXICAL_CATEGORY = "Lexical Issue"
 
@@ -100,35 +16,40 @@ def is_whitespace(c):
     # Unicode versions), so it's ok to just hard-code the values.
     return c in {
         # Usual ASCII suspects
-        '\u0009',   # \t
-        '\u000A',   # \n
-        '\u000B',   # vertical tab
-        '\u000C',   # form feed
-        '\u000D',   # \r
-        '\u0020',   # space
+        "\u0009",  # \t
+        "\u000A",  # \n
+        "\u000B",  # vertical tab
+        "\u000C",  # form feed
+        "\u000D",  # \r
+        "\u0020",  # space
         # NEXT LINE from latin1
-        '\u0085',
+        "\u0085",
         # Bidi markers
-        '\u200E',   # LEFT-TO-RIGHT MARK
-        '\u200F',   # RIGHT-TO-LEFT MARK
+        "\u200E",  # LEFT-TO-RIGHT MARK
+        "\u200F",  # RIGHT-TO-LEFT MARK
         # Dedicated whitespace characters from Unicode
-        '\u2028',   # LINE SEPARATOR
-        '\u2029'    # PARAGRAPH SEPARATOR
+        "\u2028",  # LINE SEPARATOR
+        "\u2029",  # PARAGRAPH SEPARATOR
     }
+
 
 def is_id_start(c):
     # This is XID_Start OR '_' (which formally is not a XID_Start).
-    return c == '_' or is_xid_start(c)
+    return c == "_" or is_xid_start(c)
+
 
 def is_id_continue(c):
     return is_xid_continue(c)
+
 
 def is_hex_char(char: str) -> bool:
     char = char.upper()
     return char.isdigit() or ("A" <= char <= "F")
 
+
 def is_oct_char(char: str) -> bool:
-    return ("0" <= char <= "7")
+    return "0" <= char <= "7"
+
 
 class Token:
     def __init__(self, type, value=None, start_pos=None, end_pos=None):
@@ -250,6 +171,10 @@ class Cursor:
 
             if self.current_char.isalpha() or self.current_char == "_":
                 tokens.append(self.consume_identifier())
+                continue
+
+            if self.current_char == "`":
+                tokens.append(self.consume_identifier(is_raw=True))
                 continue
 
             if self.current_char == ";":
@@ -747,7 +672,11 @@ class Cursor:
         while self.current_char is not None:
             if self.current_char.isdigit() or self.current_char == "_":
                 self.advance()
-            elif self.current_char in ('e', 'E'):
+            elif self.current_char in ("e", "E"):
+                break
+            elif self.current_char in OPERATOR_CHARACTERS:
+                break
+            elif self.current_char in ("f", "i", "u"):
                 break
             else:
                 self.diagnostics.error(
@@ -757,15 +686,15 @@ class Cursor:
                     ),
                     LEXICAL_CATEGORY,
                 )
-                self.eat_while(lambda x: x.isdigit() or x.isalpha() or x == '_')
+                self.eat_while(lambda x: x.isdigit() or x.isalpha() or x == "_")
                 break
 
     def consume_decimal_fraction(self):
-        if self.current_char == ".":
+        if self.current_char == "." and self.peek().isdigit():
             self.advance()
+            self.consume_decimal_fragment()
         else:
-            raise Exception("Cannot find decimal fraction")
-        self.consume_decimal_fragment()
+            raise Exception("Invalid decimal fraction")
 
     def consume_decimal_exponent(self):
         if self.current_char in ("e", "E"):
@@ -778,11 +707,11 @@ class Cursor:
         self.consume_decimal_fragment()
 
     def consume_hexadecimal_fraction(self):
-        if self.current_char == ".":
+        if self.current_char == "." and is_hex_char(self.peek()):
             self.advance()
+            self.consume_hexadecimal_digits()
         else:
-            raise Exception("Cannot find hexadecimal fraction")
-        self.consume_hexadecimal_digits()
+            raise Exception("Invalid hexadecimal fraction")
 
     def consume_hexadecimal_exponent(self):
         if self.current_char in ("p", "P"):
@@ -802,9 +731,9 @@ class Cursor:
         while self.current_char is not None:
             if is_hex_char(self.current_char) or self.current_char == "_":
                 self.advance()
-            elif self.current_char == '.':
+            elif self.current_char == ".":
                 break
-            elif self.current_char in ('p', 'P'):
+            elif self.current_char in ("p", "P"):
                 break
             else:
                 self.diagnostics.error(
@@ -814,7 +743,7 @@ class Cursor:
                     ),
                     LEXICAL_CATEGORY,
                 )
-                self.eat_while(lambda x: x.isdigit() or x.isalpha() or x == '_')
+                self.eat_while(lambda x: x.isdigit() or x.isalpha() or x == "_")
                 break
 
     def consume_decimal_literal(self):
@@ -826,9 +755,11 @@ class Cursor:
                 self.advance()
             elif self.current_char == "_" and allow_underline:
                 self.advance()
-            elif self.current_char == '.':
+            elif self.current_char in ("e", "E"):
                 break
-            elif self.current_char in ('e', 'E'):
+            elif self.current_char in OPERATOR_CHARACTERS:
+                break
+            elif self.current_char in ("f", "i", "u"):
                 break
             else:
                 self.diagnostics.error(
@@ -838,7 +769,7 @@ class Cursor:
                     ),
                     LEXICAL_CATEGORY,
                 )
-                self.eat_while(lambda x: x.isdigit() or x == '_')
+                self.eat_while(lambda x: x.isdigit() or x == "_")
                 break
 
     def consume_integer_literal(
@@ -846,10 +777,10 @@ class Cursor:
         literal_type: Literal["BinaryLiteral", "OctalLiteral", "HexadecimalLiteral"],
     ):
         if literal_type == "BinaryLiteral":
-            if self.current_char in ('0', '1'):
+            if self.current_char in ("0", "1"):
                 self.advance()
             while self.current_char is not None:
-                if self.current_char in ('0', '1', '_'):
+                if self.current_char in ("0", "1", "_"):
                     self.advance()
                 else:
                     self.diagnostics.error(
@@ -859,7 +790,7 @@ class Cursor:
                         ),
                         LEXICAL_CATEGORY,
                     )
-                    self.eat_while(lambda x: x.isdigit() or x == '_')
+                    self.eat_while(lambda x: x.isdigit() or x == "_")
                     break
         elif literal_type == "OctalLiteral":
             if is_oct_char(self.current_char):
@@ -875,7 +806,7 @@ class Cursor:
                         ),
                         LEXICAL_CATEGORY,
                     )
-                    self.eat_while(lambda x: x.isdigit() or x == '_')
+                    self.eat_while(lambda x: x.isdigit() or x == "_")
                     break
         elif literal_type == "HexadecimalLiteral":
             if is_hex_char(self.current_char):
@@ -891,11 +822,10 @@ class Cursor:
                         ),
                         LEXICAL_CATEGORY,
                     )
-                    self.eat_while(lambda x: x.isdigit() or x == '_')
+                    self.eat_while(lambda x: x.isdigit() or x == "_")
                     break
         else:
             raise Exception("Invalid integer literal type.")
-
 
     def consume_decimal_number(self) -> str:
         if self.current_char == ".":
@@ -904,7 +834,7 @@ class Cursor:
                 self.consume_decimal_exponent()
         elif self.current_char.isdigit():
             self.consume_decimal_literal()
-            if self.current_char == ".":
+            if self.current_char == "." and self.peek().isdigit():
                 self.consume_decimal_fraction()
                 if self.current_char in ("e", "E"):
                     self.consume_decimal_exponent()
@@ -921,7 +851,7 @@ class Cursor:
             self.consume_hexadecimal_fraction()
         elif self.current_char.isdigit():
             self.consume_hexadecimal_digits()
-            if self.current_char == ".":
+            if self.current_char == "." and is_hex_char(self.peek()):
                 self.consume_hexadecimal_fraction()
             else:
                 return "HexadecimalLiteral"
@@ -990,7 +920,7 @@ class Cursor:
                         ),
                         LEXICAL_CATEGORY,
                     )
-                
+
         elif literal_type == "FloatLiteral":
             suffix_pos = self.pos
             if self.current_char == "f":
@@ -1019,10 +949,18 @@ class Cursor:
             literal_type, self.text[start_pos : self.pos], start_pos, self.pos
         )
 
-    def consume_identifier(self):
+    def consume_identifier(self, is_raw=False) -> Token:
         """Consume an identifier (which may also include numbers after the first character)."""
         start_pos = self.pos
         id_str = ""
+        
+        if is_raw:
+            if self.current_char == "`":
+                id_str += self.current_char
+                self.advance()
+            else:
+                raise Exception("expect '`' in the raw identifier")
+        
         if self.current_char is not None and is_id_start(self.current_char):
             id_str += self.current_char
             self.advance()
@@ -1030,9 +968,27 @@ class Cursor:
         while self.current_char is not None and is_id_continue(self.current_char):
             id_str += self.current_char
             self.advance()
-        return self.create_token("IDENTIFIER", id_str, start_pos, self.pos)
+        
+        if is_raw:
+            if self.current_char == '`':
+                id_str += self.current_char
+                self.advance()
+            else:
+                self.diagnostics.error(
+                    f"expected character '`', but character '{self.text[self.pos:self.pos + 1]}' found",
+                    SourceLocation.from_tuple(
+                        self.filepath, get_line_column(self.text, self.pos)
+                    ),
+                    LEXICAL_CATEGORY,
+                )
+        
+        if is_raw:
+            token_name = "RAW_IDENTIFIER"
+        else:
+            token_name = "IDENTIFIER"
+        return self.create_token(token_name, id_str, start_pos, self.pos)
 
-    def consume_string(self, quote_char, single_char=False, byte_string=False):
+    def consume_string(self, quote_char, single_char=False, byte_string=False) -> Token:
         """Consume a string literal, handling escape sequences and matching quotes."""
         start_pos = self.pos
         string_value = ""

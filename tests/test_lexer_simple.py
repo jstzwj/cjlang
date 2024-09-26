@@ -28,6 +28,39 @@ class TestLexerSimple(unittest.TestCase):
             taret_tokens,
         )
 
+    def test_unicode(self):
+        test_case = "let 仓颉: Float64 = 1.1e3"
+        tokens = self.get_tokens(test_case)
+        taret_tokens = [
+            Token("IDENTIFIER", "let", 0, 3),
+            Token("IDENTIFIER", "仓颉", 4, 6),
+            Token("COLON", None, 6, 7),
+            Token("IDENTIFIER", "Float64", 8, 15),
+            Token("ASSIGN", None, 16, 17),
+            Token("FloatLiteral", "1.1e3", 18, 23),
+            Token("EOF", None, None, None),
+        ]
+        self.assertEqual(
+            tokens,
+            taret_tokens,
+        )
+
+    def test_raw_ident(self):
+        test_case = "var `a` = 5;"
+        tokens = self.get_tokens(test_case)
+        taret_tokens = [
+            Token('IDENTIFIER', "var", 0, 3),
+            Token('RAW_IDENTIFIER', "`a`", 4, 7),
+            Token('ASSIGN', None, 8, 9),
+            Token('DecimalLiteral', "5", 10, 11),
+            Token('SEMICOLON', None, 11, 12),
+            Token('EOF', None, None, None),
+        ]
+        self.assertEqual(
+            tokens,
+            taret_tokens,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
