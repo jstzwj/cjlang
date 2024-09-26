@@ -9,9 +9,10 @@ class Level(Enum):
     EXTWARN = 4
     ERROR = 5
 
+
 def get_line_column(input_str, char_pos) -> Tuple[int, int]:
-    lines = input_str.split('\n')
-    
+    lines = input_str.split("\n")
+
     line_count = 1
     for index, line in enumerate(lines):
         if char_pos <= len(line):
@@ -22,12 +23,13 @@ def get_line_column(input_str, char_pos) -> Tuple[int, int]:
 
     return line_count, column
 
+
 class SourceLocation:
     def __init__(self, file_name: str, line: int, column: int):
         self.file_name: str = file_name
         self.line: str = line
         self.column: str = column
-    
+
     @staticmethod
     def from_tuple(file_name: str, lc: Tuple[int, int]) -> "SourceLocation":
         return SourceLocation(file_name=file_name, line=lc[0], column=lc[1])
@@ -37,7 +39,11 @@ class SourceLocation:
 
     def __eq__(self, other):
         if isinstance(other, SourceLocation):
-            return self.file_name == other.file_name and self.line == other.line and self.column == other.column
+            return (
+                self.file_name == other.file_name
+                and self.line == other.line
+                and self.column == other.column
+            )
         return False
 
     def __lt__(self, other):
@@ -48,6 +54,7 @@ class SourceLocation:
                 return self.line < other.line
             return self.file_name < other.file_name
         raise NotImplementedError
+
 
 class Diagnostic:
     def __init__(
@@ -61,14 +68,18 @@ class Diagnostic:
         self.message = message
         self.position = position
         self.category = category
-    
-    # "Semantic Issue", "Parse Issue", "Lexical Issue", "Preprocessor Issue", 
-    
-    
+
+    # "Semantic Issue", "Parse Issue", "Lexical Issue", "Preprocessor Issue",
+
     def __str__(self):
         return f"Severity: {self.severity}, Message: {self.message}, Position: {self.position}, Category: {self.category}"
 
     def __eq__(self, other):
         if isinstance(other, Diagnostic):
-            return self.severity == other.severity and self.message == other.message and self.position == other.position and self.category == other.category
+            return (
+                self.severity == other.severity
+                and self.message == other.message
+                and self.position == other.position
+                and self.category == other.category
+            )
         return False

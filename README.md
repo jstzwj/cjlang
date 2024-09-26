@@ -5,11 +5,32 @@ Reference material for this repository: [Cangjie Programming Language Specificat
 
 ## Installation
 
-You can install `cjlang` using pip:
+### Method 1: With pip
 
 ```bash
 pip install cjlang
 ```
+
+or:
+
+```bash
+pip install git+https://github.com/jstzwj/cjlang.git 
+```
+
+### Method 2: From source
+
+1. Clone this repository
+```bash
+git clone https://github.com/jstzwj/cjlang.git
+cd cjlang
+```
+
+2. Install the Package
+```bash
+pip install --upgrade pip
+pip install -e .
+```
+
 
 ## Usage
 
