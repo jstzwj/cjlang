@@ -66,4 +66,6 @@ class DiagnosticEngine:
 
     def show_diagnostics(self):
         for diagnostic in self.diagnostics:
+            pos = diagnostic.position
             print(f"{diagnostic.severity.name.upper()}: {diagnostic.message}")
+            print(f"  ==> {pos.file_name}:{pos.line}:{pos.column}:")

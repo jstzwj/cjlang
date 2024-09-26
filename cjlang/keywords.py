@@ -83,4 +83,4 @@ CONTEXTUAL_KEYWORDS = [
     "sealed",
 ]
 
-OPERATOR_CHARACTERS = "`@.[]()+-?!-*/%<>=&|^$~;"
+OPERATOR_CHARACTERS = "`@.[]()+-?!-*/%<>=&|^$~,;"

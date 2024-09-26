@@ -674,6 +674,8 @@ class Cursor:
                 self.advance()
             elif self.current_char in ("e", "E"):
                 break
+            elif is_whitespace(self.current_char):
+                break
             elif self.current_char in OPERATOR_CHARACTERS:
                 break
             elif self.current_char in ("f", "i", "u"):
@@ -731,9 +733,13 @@ class Cursor:
         while self.current_char is not None:
             if is_hex_char(self.current_char) or self.current_char == "_":
                 self.advance()
-            elif self.current_char == ".":
-                break
             elif self.current_char in ("p", "P"):
+                break
+            elif is_whitespace(self.current_char):
+                break
+            elif self.current_char in OPERATOR_CHARACTERS:
+                break
+            elif self.current_char in ("f", "i", "u"):
                 break
             else:
                 self.diagnostics.error(
@@ -756,6 +762,8 @@ class Cursor:
             elif self.current_char == "_" and allow_underline:
                 self.advance()
             elif self.current_char in ("e", "E"):
+                break
+            elif is_whitespace(self.current_char):
                 break
             elif self.current_char in OPERATOR_CHARACTERS:
                 break
@@ -849,7 +857,7 @@ class Cursor:
     def consume_hexadecimal_number(self) -> str:
         if self.current_char == ".":
             self.consume_hexadecimal_fraction()
-        elif self.current_char.isdigit():
+        elif is_hex_char(self.current_char):
             self.consume_hexadecimal_digits()
             if self.current_char == "." and is_hex_char(self.peek()):
                 self.consume_hexadecimal_fraction()
