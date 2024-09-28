@@ -115,10 +115,16 @@ class Cursor:
                 self.advance()
             else:
                 has_error = True
-                if custom_message is not None:
-                    msg = custom_message
+                
+                if self.current_char is None:
+                    current_c = ""
                 else:
-                    msg = f"Expected '{c}', found {self.current_char}"
+                    current_c = self.current_char
+
+                if custom_message is not None:
+                    msg = custom_message.replace("{c}", c).replace("{s}", current_c)
+                else:
+                    msg = "Expected '{c}', found {s}".replace("{c}", c).replace("{s}", current_c)
                 self.diagnostics.error(
                     msg,
                     SourceLocation.from_tuple(
@@ -1155,11 +1161,12 @@ class Cursor:
             else:
                 self.advance()  # Consume the valid single character
 
+        self.match(quote_type, "RuneLiteral can only contain one character.")
         # Match closing quote (should match opening quote)
-        has_closing_error = self.match(quote_type, "RuneLiteral can only contain one character.")
-        if has_closing_error:
+        if self.current_char != quote_type:
             self.eat_while(lambda x: x != quote_type)
-            self.match(quote_type)
+            self.match(quote_type, "Unterminated RuneLiteral.")
+
         return self.create_token(
             TokenKind.RUNE_LITERAL,
             value=self.text[start_pos + 2 : self.pos - 1],

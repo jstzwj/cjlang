@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "Cython>=3.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -13,7 +13,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-    "numpy", "rich>=10.0.0", "shortuuid"
+    "rich>=10.0.0", "shortuuid", "Cython"
 ]
 
 [project.optional-dependencies]
@@ -24,6 +24,7 @@ dev = ["black==23.3.0", "pylint==2.8.2"]
 "Bug Tracker" = "https://github.com/jstzwj/cjlang/issues"
 
 [tool.setuptools.packages.find]
+where = ["src"]
 exclude = ["assets*", "benchmark*", "docs", "dist*", "playground*", "scripts*", "tests*"]
 
 [tool.wheel]
