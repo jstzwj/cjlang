@@ -84,3 +84,4 @@ CONTEXTUAL_KEYWORDS = [
 ]
 
 OPERATOR_CHARACTERS = "`@.[]()+-?!-*/%<>=&|^$~,;"
+ESCAPED_IDENTIFIER = ('t', 'b', 'r', 'n', '\'', '"', '\\', 'f', 'v', '0', '$')

@@ -3,7 +3,7 @@ from typing import List, Literal, Optional
 
 from cjlang.diagnostics.diagnostic import SourceLocation, get_line_column
 from cjlang.diagnostics.engine import DiagnosticEngine
-from cjlang.keywords import OPERATOR_CHARACTERS
+from cjlang.keywords import ESCAPED_IDENTIFIER, OPERATOR_CHARACTERS
 from cjlang.lexer.kinds import TokenKind
 from cjlang.utils.unicode_xid import is_xid_continue, is_xid_start
 
@@ -32,6 +32,7 @@ def is_whitespace(c) -> bool:
         "\u2028",  # LINE SEPARATOR
         "\u2029",  # PARAGRAPH SEPARATOR
     }
+
 
 def is_id_start(c):
     # This is XID_Start OR '_' (which formally is not a XID_Start).
@@ -105,6 +106,31 @@ class Cursor:
         else:
             self.current_char = None
 
+    def match(self, c: str, custom_message: Optional[str]=None) -> bool:
+        has_error = False
+        if len(c) == 0:
+            return
+        elif len(c) == 1:
+            if self.current_char == c:
+                self.advance()
+            else:
+                has_error = True
+                if custom_message is not None:
+                    msg = custom_message
+                else:
+                    msg = f"Expected '{c}', found {self.current_char}"
+                self.diagnostics.error(
+                    msg,
+                    SourceLocation.from_tuple(
+                        self.filepath, get_line_column(self.text, self.pos)
+                    ),
+                    LEXICAL_CATEGORY,
+                )
+        else:
+            for ch in c:
+                has_error |= self.match(ch)
+        return has_error
+
     def eat_while(self, condition) -> None:
         while self.current_char is not None and condition(self.current_char):
             self.advance()
@@ -131,9 +157,9 @@ class Cursor:
         # EOF
         if self.current_char is None:
             return Token(TokenKind.EOF)
-        
+
         # New Line
-        if self.current_char == '\n':
+        if self.current_char == "\n":
             self.advance()
             return self.create_token(
                 TokenKind.NL,
@@ -141,8 +167,8 @@ class Cursor:
                 start_pos=self.pos - 1,
                 end_pos=self.pos,
             )
-        
-        if self.current_char == '\r' and self.peek() == '\n':
+
+        if self.current_char == "\r" and self.peek() == "\n":
             self.advance()
             self.advance()
             return self.create_token(
@@ -154,14 +180,10 @@ class Cursor:
 
         # White Space
         if is_whitespace(self.current_char):
-            return self.consume_whitespace()
-
-        # Identifier
-        if self.current_char.isalpha() or self.current_char == "_":
-            return self.consume_identifier()
+            return self.whitespace()
 
         if self.current_char == "`":
-            return self.consume_identifier(is_raw=True)
+            return self.identifier(is_raw=True)
 
         # IntegerLiteral | FloatLiteral
         if self.current_char.isdigit() or (
@@ -170,23 +192,22 @@ class Cursor:
             return self.consume_number()
 
         # RuneLiteral
-        if self.current_char == 'r' and self.peek() == '\'':
-            pass
-        
+        if self.current_char == "r" and self.peek() == "'":
+            return self.rune_literal()
+
         # ByteLiteral
-        if self.current_char == 'b' and self.peek() == '\'':
+        if self.current_char == "b" and self.peek() == "'":
             pass
-        
+
         # BOOLEAN_LITERAL
-        
+
         # LINE_STRING_LITERAL
-        
+
         # MULTI_LINE_STRING_LITERAL
-        
+
         # BYTE_STRING_ARRAY_LITERAL
-        
+
         # UNIT_LITERAL
-        
 
         if self.current_char == "b" and self.peek() in ("'", '"'):
             if self.peek() == "'":
@@ -194,15 +215,13 @@ class Cursor:
             else:
                 single_char = False
 
-            return self.consume_string(
-                self.peek(), single_char=single_char, byte_string=True
-            )
+            return self.string(self.peek(), single_char=single_char, byte_string=True)
 
         if self.current_char == '"':
-            return self.consume_string('"', single_char=False)
+            return self.string('"', single_char=False)
 
         if self.current_char == "'":
-            return self.consume_string("'", single_char=True)
+            return self.string("'", single_char=True)
 
         if self.current_char == ".":
             if self.peek() == ".":
@@ -225,7 +244,6 @@ class Cursor:
                         start_pos=self.pos - 2,
                         end_pos=self.pos,
                     )
-
 
         if self.current_char == ";":
             self.advance()
@@ -256,11 +274,11 @@ class Cursor:
 
         # Comments
         if self.current_char == "/" and self.peek() == "/":
-            token = self.consume_line_comment()
+            token = self.line_comment()
             return token
 
         if self.current_char == "/" and self.peek() == "*":
-            token = self.consume_delimited_comment()
+            token = self.delimited_comment()
             return token
 
         # Operatiors
@@ -458,20 +476,20 @@ class Cursor:
         if self.current_char == "{":
             self.advance()
             return self.create_token(
-                    TokenKind.LCURL,
-                    value=None,
-                    start_pos=self.pos - 1,
-                    end_pos=self.pos,
-                )
+                TokenKind.LCURL,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == "}":
             self.advance()
             return self.create_token(
-                    TokenKind.RCURL,
-                    value=None,
-                    start_pos=self.pos - 1,
-                    end_pos=self.pos,
-                )
+                TokenKind.RCURL,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == "%":
             if self.peek() == "=":
@@ -519,14 +537,25 @@ class Cursor:
                     TokenKind.GE, value=None, start_pos=self.pos - 2, end_pos=self.pos
                 )
             elif self.peek() == ">":
-                self.advance()  # Move past the first '>'
-                self.advance()  # Move past the second '>'
-                return self.create_token(
-                    TokenKind.RSHIFT,
-                    value=None,
-                    start_pos=self.pos - 2,
-                    end_pos=self.pos,
-                )
+                if self.first_n(2) == "=":
+                    self.advance()  # Move past the first '>'
+                    self.advance()  # Move past the second '>'
+                    self.advance()  # Move past the second '='
+                    return self.create_token(
+                        TokenKind.RSHIFT_ASSIGN,
+                        value=None,
+                        start_pos=self.pos - 3,
+                        end_pos=self.pos,
+                    )
+                else:
+                    self.advance()  # Move past the first '>'
+                    self.advance()  # Move past the second '>'
+                    return self.create_token(
+                        TokenKind.RSHIFT,
+                        value=None,
+                        start_pos=self.pos - 2,
+                        end_pos=self.pos,
+                    )
             else:
                 self.advance()
                 return self.create_token(
@@ -714,6 +743,10 @@ class Cursor:
                 end_pos=self.pos,
             )
 
+        # Identifier
+        if self.current_char.isalpha() or self.current_char == "_":
+            return self.identifier()
+
         raise Exception(f"Unexpected character: {self.current_char}")
 
     def peek(self):
@@ -736,13 +769,13 @@ class Cursor:
             end_pos = self.pos + 1
         return Token(type=token_type, value=value, start_pos=start_pos, end_pos=end_pos)
 
-    def consume_whitespace(self) -> Token:
+    def whitespace(self) -> Token:
         start_pos = self.pos
         while self.current_char is not None and is_whitespace(self.current_char):
             self.advance()
         return self.create_token(TokenKind.WS, None, start_pos, self.pos)
 
-    def consume_line_comment(self) -> Token:
+    def line_comment(self) -> Token:
         start_pos = self.pos
         self.advance()
         self.advance()
@@ -753,7 +786,7 @@ class Cursor:
             self.advance()
         return self.create_token(TokenKind.LINE_COMMENT, None, start_pos, self.pos)
 
-    def consume_delimited_comment(self) -> Token:
+    def delimited_comment(self) -> Token:
         start_pos = self.pos
         self.advance()
         self.advance()
@@ -1059,8 +1092,8 @@ class Cursor:
             literal_type, self.text[start_pos : self.pos], start_pos, self.pos
         )
 
-    def consume_identifier(self, is_raw=False) -> Token:
-        """Consume an identifier (which may also include numbers after the first character)."""
+    def identifier(self, is_raw=False) -> Token:
+        """Return an identifier (which may also include numbers after the first character)."""
         start_pos = self.pos
         id_str = ""
 
@@ -1098,7 +1131,104 @@ class Cursor:
             token_name = TokenKind.IDENT
         return self.create_token(token_name, id_str, start_pos, self.pos)
 
-    def consume_string(self, quote_char, single_char=False, byte_string=False) -> Token:
+    def rune_literal(self) -> Token:
+        start_pos = self.pos
+        if self.current_char == "r":
+            self.advance()
+        else:
+            raise SyntaxError("Except 'r' at the beginning of rune literal.")
+
+        # Match opening quote (either single or double)
+        quote_type = self.current_char
+        if quote_type not in ("'", '"'):
+            raise SyntaxError(f"Expected ' or \", found {self.current_char}")
+        self.advance()  # Consume opening quote
+
+        # Consume either SingleChar or EscapeSeq
+        if self.current_char == "\\":
+            # Start of an escape sequence
+            self.consume_escape_sequence()
+        else:
+            # SingleChar: any character except \, ', ", and newlines
+            if self.current_char in ("'", '"', "\\", "\r", "\n"):
+                return
+            else:
+                self.advance()  # Consume the valid single character
+
+        # Match closing quote (should match opening quote)
+        has_closing_error = self.match(quote_type, "RuneLiteral can only contain one character.")
+        if has_closing_error:
+            self.eat_while(lambda x: x != quote_type)
+            self.match(quote_type)
+        return self.create_token(
+            TokenKind.RUNE_LITERAL,
+            value=self.text[start_pos + 2 : self.pos - 1],
+            start_pos=start_pos,
+            end_pos=self.pos,
+        )
+
+    def consume_escape_sequence(self):
+        # Start of an escape sequence ('\')
+        if self.current_char == "\\":
+            self.advance()  # Consume the backslash
+        else:
+            raise SyntaxError(f"Expected '\\', found {self.current_char}")
+
+        if self.current_char == "u":
+            # Handle Unicode escape sequence
+            self.consume_unicode_escape()
+        elif self.current_char in ESCAPED_IDENTIFIER:
+            # Handle common escaped characters
+            self.advance()
+        else:
+            raise SyntaxError(f"Unknown escape sequence: \\{self.current_char}")
+
+    def consume_unicode_escape(self):
+        self.match("u")
+        self.match("{")
+
+        # Consume hexadecimal digits (up to 8 digits)
+        hex_digits = ""
+        while is_hex_char(self.current_char) and len(hex_digits) < 8:
+            hex_digits += self.current_char
+            self.advance()
+
+        if len(hex_digits) == 0:
+            self.diagnostics.error(
+                "Expected at least one hexadecimal digit in Unicode escape sequence",
+                SourceLocation.from_tuple(
+                    self.filepath, get_line_column(self.text, self.pos)
+                ),
+                LEXICAL_CATEGORY,
+            )
+
+        self.match("}")  # Match closing '}'
+
+    def byte_literal(self) -> Token:
+        # Logic for consuming byte literal goes here
+        pass
+
+    def boolean_literal(self) -> Token:
+        # Logic for consuming boolean literal goes here
+        pass
+
+    def line_string_literal(self) -> Token:
+        # Logic for consuming line string literal goes here
+        pass
+
+    def multi_line_string_literal(self) -> Token:
+        # Logic for consuming multi-line string literal goes here
+        pass
+
+    def byte_string_array_literal(self) -> Token:
+        # Logic for consuming byte string array literal goes here
+        pass
+
+    def unit_literal(self) -> Token:
+        # Logic for consuming unit literal goes here
+        pass
+
+    def string(self, quote_char, single_char=False, byte_string=False) -> Token:
         """Consume a string literal, handling escape sequences and matching quotes."""
         start_pos = self.pos
         string_value = ""
