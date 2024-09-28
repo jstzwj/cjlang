@@ -156,6 +156,38 @@ class Cursor:
         if is_whitespace(self.current_char):
             return self.consume_whitespace()
 
+        # Identifier
+        if self.current_char.isalpha() or self.current_char == "_":
+            return self.consume_identifier()
+
+        if self.current_char == "`":
+            return self.consume_identifier(is_raw=True)
+
+        # IntegerLiteral | FloatLiteral
+        if self.current_char.isdigit() or (
+            self.current_char == "." and self.peek().isdigit()
+        ):
+            return self.consume_number()
+
+        # RuneLiteral
+        if self.current_char == 'r' and self.peek() == '\'':
+            pass
+        
+        # ByteLiteral
+        if self.current_char == 'b' and self.peek() == '\'':
+            pass
+        
+        # BOOLEAN_LITERAL
+        
+        # LINE_STRING_LITERAL
+        
+        # MULTI_LINE_STRING_LITERAL
+        
+        # BYTE_STRING_ARRAY_LITERAL
+        
+        # UNIT_LITERAL
+        
+
         if self.current_char == "b" and self.peek() in ("'", '"'):
             if self.peek() == "'":
                 single_char = True
@@ -194,16 +226,6 @@ class Cursor:
                         end_pos=self.pos,
                     )
 
-        if self.current_char.isdigit() or (
-            self.current_char == "." and self.peek().isdigit()
-        ):
-            return self.consume_number()
-
-        if self.current_char.isalpha() or self.current_char == "_":
-            return self.consume_identifier()
-
-        if self.current_char == "`":
-            return self.consume_identifier(is_raw=True)
 
         if self.current_char == ";":
             self.advance()
