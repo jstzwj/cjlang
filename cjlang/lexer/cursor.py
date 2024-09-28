@@ -4,24 +4,13 @@ from typing import List, Literal, Optional
 from cjlang.diagnostics.diagnostic import SourceLocation, get_line_column
 from cjlang.diagnostics.engine import DiagnosticEngine
 from cjlang.keywords import OPERATOR_CHARACTERS
+from cjlang.lexer.kinds import TokenKind
 from cjlang.utils.unicode_xid import is_xid_continue, is_xid_start
 
 LEXICAL_CATEGORY = "Lexical Issue"
 
-from enum import Enum
 
-class Token(Enum):
-    INT = 1
-    FLOAT = 2
-    STRING = 3
-    PLUS = 4
-    MINUS = 5
-    MULTIPLY = 6
-    DIVIDE = 7
-    LPAREN = 8
-    RPAREN = 9
-
-def is_whitespace(c):
+def is_whitespace(c) -> bool:
     # This is Pattern_White_Space.
     #
     # Note that this set is stable (ie, it doesn't change with different
@@ -44,7 +33,6 @@ def is_whitespace(c):
         "\u2029",  # PARAGRAPH SEPARATOR
     }
 
-
 def is_id_start(c):
     # This is XID_Start OR '_' (which formally is not a XID_Start).
     return c == "_" or is_xid_start(c)
@@ -64,11 +52,17 @@ def is_oct_char(char: str) -> bool:
 
 
 class Token:
-    def __init__(self, type, value=None, start_pos=None, end_pos=None):
-        self.type = type
-        self.value = value
-        self.start_pos = start_pos  # Start position of the token
-        self.end_pos = end_pos  # End position of the token
+    def __init__(
+        self,
+        type: TokenKind,
+        value: Optional[str] = None,
+        start_pos: Optional[int] = None,
+        end_pos: Optional[int] = None,
+    ):
+        self.type: TokenKind = type
+        self.value: Optional[str] = value
+        self.start_pos: Optional[int] = start_pos  # Start position of the token
+        self.end_pos: Optional[int] = end_pos  # End position of the token
 
     def __eq__(self, other):
         if not isinstance(other, Token):
@@ -117,7 +111,7 @@ class Cursor:
 
     def is_eof(self) -> bool:
         return self.pos >= len(self.text)
-    
+
     def clone(self) -> "Cursor":
         new_cursor = Cursor(self.text, self.filepath, self.diagnostics)
         new_cursor.pos = self.pos
@@ -129,14 +123,36 @@ class Cursor:
         while True:
             token = self.advance_token()
             tokens.append(token)
-            if token.type == "EOF":
+            if token.type == TokenKind.EOF:
                 break
         return tokens
 
     def advance_token(self) -> Token:
+        # EOF
         if self.current_char is None:
-            return Token("EOF")
+            return Token(TokenKind.EOF)
+        
+        # New Line
+        if self.current_char == '\n':
+            self.advance()
+            return self.create_token(
+                TokenKind.NL,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
+        
+        if self.current_char == '\r' and self.peek() == '\n':
+            self.advance()
+            self.advance()
+            return self.create_token(
+                TokenKind.NL,
+                value=None,
+                start_pos=self.pos - 2,
+                end_pos=self.pos,
+            )
 
+        # White Space
         if is_whitespace(self.current_char):
             return self.consume_whitespace()
 
@@ -159,22 +175,20 @@ class Cursor:
         if self.current_char == ".":
             if self.peek() == ".":
                 if self.first_n(2) == "=":
-                    token_name = "RANGE_EQ"
                     self.advance()  # Move past the first '.'
                     self.advance()  # Move past the second '.'
                     self.advance()  # Move past the third '='
                     return self.create_token(
-                        token_name,
+                        TokenKind.CLOSEDRANGEOP,
                         value=None,
                         start_pos=self.pos - 3,
                         end_pos=self.pos,
                     )
                 else:
-                    token_name = "RANGE"
                     self.advance()  # Move past the first '.'
                     self.advance()  # Move past the second '.'
                     return self.create_token(
-                        token_name,
+                        TokenKind.RANGEOP,
                         value=None,
                         start_pos=self.pos - 2,
                         end_pos=self.pos,
@@ -192,19 +206,31 @@ class Cursor:
             return self.consume_identifier(is_raw=True)
 
         if self.current_char == ";":
-            token = self.create_token("SEMICOLON")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.COLON,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == ",":
-            token = self.create_token("COMMA")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.COMMA,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == ":":
-            token = self.create_token("COLON")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.COLON,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         # Comments
         if self.current_char == "/" and self.peek() == "/":
@@ -212,45 +238,69 @@ class Cursor:
             return token
 
         if self.current_char == "/" and self.peek() == "*":
-            token = self.consume_block_comment()
+            token = self.consume_delimited_comment()
             return token
 
         # Operatiors
         if self.current_char == "@":
-            token = self.create_token("MACRO")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.AT,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == ".":
-            token = self.create_token("DOT")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.DOT,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == "[":
-            token = self.create_token("LBRACKET")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.LSQUARE,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == "]":
-            token = self.create_token("RBRACKET")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.RSQUARE,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == "(":
-            token = self.create_token("LPAREN")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.LPAREN,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == ")":
-            token = self.create_token("RPAREN")
             self.advance()
-            return token
+            return self.create_token(
+                TokenKind.RPAREN,
+                value=None,
+                start_pos=self.pos - 1,
+                end_pos=self.pos,
+            )
 
         if self.current_char == "+" and self.peek() == "+":
             self.advance()  # Move past the first '+'
             self.advance()  # Move past the second '+'
             return self.create_token(
-                "POSTFIX_INCREMENT",
+                TokenKind.INC,
                 value=None,
                 start_pos=self.pos - 2,
                 end_pos=self.pos,
@@ -260,7 +310,7 @@ class Cursor:
             self.advance()  # Move past the first '-'
             self.advance()  # Move past the second '-'
             return self.create_token(
-                "POSTFIX_DECREMENT",
+                TokenKind.DEC,
                 value=None,
                 start_pos=self.pos - 2,
                 end_pos=self.pos,
@@ -271,15 +321,19 @@ class Cursor:
                 self.advance()  # Move past the first '?'
                 self.advance()  # Move past the second '?'
                 return self.create_token(
-                    "COALESCING",
+                    TokenKind.COALESCING,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("QUESTION")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.QUEST,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "*":
             if self.peek() == "*":
@@ -288,7 +342,7 @@ class Cursor:
                     self.advance()  # Move past the second '*'
                     self.advance()  # Move past the second '='
                     return self.create_token(
-                        "COMPOUND_ASSIGN",
+                        TokenKind.EXP_ASSIGN,
                         value=None,
                         start_pos=self.pos - 3,
                         end_pos=self.pos,
@@ -297,7 +351,7 @@ class Cursor:
                     self.advance()  # Move past the first '*'
                     self.advance()  # Move past the second '*'
                     return self.create_token(
-                        "POWER",
+                        TokenKind.EXP,
                         value=None,
                         start_pos=self.pos - 2,
                         end_pos=self.pos,
@@ -306,30 +360,38 @@ class Cursor:
                 self.advance()  # Move past the first '*'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "MULTIPLY_ASSIGN",
+                    TokenKind.MUL_ASSIGN,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("STAR")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.MUL,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "+":
             if self.peek() == "=":
                 self.advance()  # Move past the first '+'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "PLUS_ASSIGN",
+                    TokenKind.ADD_ASSIGN,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("PLUS")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.ADD,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "-":
             if self.peek() == "=":
@@ -337,99 +399,127 @@ class Cursor:
                 self.advance()  # Move past the second '='
 
                 return self.create_token(
-                    "MINUS_ASSIGN",
+                    TokenKind.SUB_ASSIGN,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
 
             else:
-                token = self.create_token("MINUS")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.SUB,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "/":
             if self.peek() == "=":
                 self.advance()  # Move past the first '/'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "DIVIDE_ASSIGN",
+                    TokenKind.DIV_ASSIGN,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("SLASH")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.DIV,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "{":
-            token = self.create_token("LBRACE")
             self.advance()
-            return token
+            return self.create_token(
+                    TokenKind.LCURL,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "}":
-            token = self.create_token("RBRACE")
             self.advance()
-            return token
+            return self.create_token(
+                    TokenKind.RCURL,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "%":
             if self.peek() == "=":
                 self.advance()  # Move past the first '%'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "REMAINDER_ASSIGN",
+                    TokenKind.MOD_ASSIGN,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("REMAINDER")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.MOD,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "^":
             if self.peek() == "=":
                 self.advance()  # Move past the first '^'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "BITWISE_XOR_ASSIGN",
+                    TokenKind.BITXOR_ASSIGN,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("BITWISE_XOR")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.BITXOR,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == ">":
             if self.peek() == "=":
                 self.advance()  # Move past the first '>'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "NLT", value=None, start_pos=self.pos - 2, end_pos=self.pos
+                    TokenKind.GE, value=None, start_pos=self.pos - 2, end_pos=self.pos
                 )
             elif self.peek() == ">":
                 self.advance()  # Move past the first '>'
                 self.advance()  # Move past the second '>'
                 return self.create_token(
-                    "BITWISE_RIGHT_SHIFT",
+                    TokenKind.RSHIFT,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("GT")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.GT,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "<":
             if self.peek() == "=":
                 self.advance()  # Move past the first '<'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "NGT", value=None, start_pos=self.pos - 2, end_pos=self.pos
+                    TokenKind.LE, value=None, start_pos=self.pos - 2, end_pos=self.pos
                 )
             elif self.peek() == "<":
                 if self.first_n(2) == "=":
@@ -437,7 +527,7 @@ class Cursor:
                     self.advance()  # Move past the second '<'
                     self.advance()  # Move past the second '='
                     return self.create_token(
-                        "BITWISE_LEFT_SHIFT_ASSIGN",
+                        TokenKind.LSHIFT_ASSIGN,
                         value=None,
                         start_pos=self.pos - 3,
                         end_pos=self.pos,
@@ -446,16 +536,20 @@ class Cursor:
                     self.advance()  # Move past the first '<'
                     self.advance()  # Move past the second '<'
                     return self.create_token(
-                        "BITWISE_LEFT_SHIFT",
+                        TokenKind.LSHIFT,
                         value=None,
                         start_pos=self.pos - 2,
                         end_pos=self.pos,
                     )
 
             else:
-                token = self.create_token("LT")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.LT,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         # Check for '==' (EQUAL_EQUAL)
         if self.current_char == "=":
@@ -463,30 +557,38 @@ class Cursor:
                 self.advance()  # Move past the first '='
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "EQUAL",
+                    TokenKind.EQUAL,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("ASSIGN")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.ASSIGN,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "!":
             if self.peek() == "=":
                 self.advance()  # Move past the first '!'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "NOTEQUAL",
+                    TokenKind.NOTEQUAL,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
             else:
-                token = self.create_token("NOT")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.NOT,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "&":
             if self.peek() == "&":
@@ -495,7 +597,7 @@ class Cursor:
                     self.advance()  # Move past the second '&'
                     self.advance()  # Move past the second '='
                     token = self.create_token(
-                        "LOGICAL_AND_ASSIGN",
+                        TokenKind.AND_ASSIGN,
                         value=None,
                         start_pos=self.pos - 3,
                         end_pos=self.pos,
@@ -504,7 +606,7 @@ class Cursor:
                     self.advance()  # Move past the first '&'
                     self.advance()  # Move past the second '&'
                     return self.create_token(
-                        "LOGICAL_AND",
+                        TokenKind.AND,
                         value=None,
                         start_pos=self.pos - 2,
                         end_pos=self.pos,
@@ -513,16 +615,20 @@ class Cursor:
                 self.advance()  # Move past the first '&'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "BITWISE_AND_ASSIGN",
+                    TokenKind.BITAND_ASSIGN,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
 
             else:
-                token = self.create_token("BITWISE_AND")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.BITAND,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "|":
             if self.peek() == "|":
@@ -531,7 +637,7 @@ class Cursor:
                     self.advance()  # Move past the second '|'
                     self.advance()  # Move past the second '='
                     return self.create_token(
-                        "LOGICAL_OR_ASSIGN",
+                        TokenKind.OR_ASSIGN,
                         value=None,
                         start_pos=self.pos - 3,
                         end_pos=self.pos,
@@ -541,7 +647,7 @@ class Cursor:
                     self.advance()  # Move past the first '|'
                     self.advance()  # Move past the second '|'
                     return self.create_token(
-                        "LOGICAL_OR",
+                        TokenKind.OR,
                         value=None,
                         start_pos=self.pos - 2,
                         end_pos=self.pos,
@@ -551,7 +657,7 @@ class Cursor:
                 self.advance()  # Move past the first '|'
                 self.advance()  # Move past the second '='
                 return self.create_token(
-                    "BITWISE_OR_ASSIGN",
+                    TokenKind.BITOR_ASSIGN,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
@@ -561,22 +667,26 @@ class Cursor:
                 self.advance()  # Move past the first '|'
                 self.advance()  # Move past the second '>'
                 return self.create_token(
-                    "PIPELINE",
+                    TokenKind.PIPELINE,
                     value=None,
                     start_pos=self.pos - 2,
                     end_pos=self.pos,
                 )
 
             else:
-                token = self.create_token("BITWISE_OR")
                 self.advance()
-                return token
+                return self.create_token(
+                    TokenKind.BITOR,
+                    value=None,
+                    start_pos=self.pos - 1,
+                    end_pos=self.pos,
+                )
 
         if self.current_char == "~" and self.peek() == ">":
             self.advance()  # Move past the first '~'
             self.advance()  # Move past the second '>'
             return self.create_token(
-                "COMPOSITION",
+                TokenKind.COMPOSITION,
                 value=None,
                 start_pos=self.pos - 2,
                 end_pos=self.pos,
@@ -608,7 +718,7 @@ class Cursor:
         start_pos = self.pos
         while self.current_char is not None and is_whitespace(self.current_char):
             self.advance()
-        return self.create_token("WHITESPACE", None, start_pos, self.pos)
+        return self.create_token(TokenKind.WS, None, start_pos, self.pos)
 
     def consume_line_comment(self) -> Token:
         start_pos = self.pos
@@ -619,9 +729,9 @@ class Cursor:
             if self.current_char in ["\n", "\r"]:
                 break
             self.advance()
-        return self.create_token("LINE_COMMENT", None, start_pos, self.pos)
+        return self.create_token(TokenKind.LINE_COMMENT, None, start_pos, self.pos)
 
-    def consume_block_comment(self) -> Token:
+    def consume_delimited_comment(self) -> Token:
         start_pos = self.pos
         self.advance()
         self.advance()
@@ -631,7 +741,7 @@ class Cursor:
                 self.advance()
                 break
             self.advance()
-        return self.create_token("BLOCK_COMMENT", None, start_pos, self.pos)
+        return self.create_token(TokenKind.DELIMITED_COMMENT, None, start_pos, self.pos)
 
     def consume_decimal_fragment(self):
         if self.current_char.isdigit():
@@ -752,9 +862,9 @@ class Cursor:
 
     def consume_integer_literal(
         self,
-        literal_type: Literal["BinaryLiteral", "OctalLiteral", "HexadecimalLiteral"],
+        literal_type: TokenKind,
     ):
-        if literal_type == "BinaryLiteral":
+        if literal_type == TokenKind.BINARY_LITERAL:
             if self.current_char in ("0", "1"):
                 self.advance()
             while self.current_char is not None:
@@ -770,7 +880,7 @@ class Cursor:
                     )
                     self.eat_while(lambda x: x.isdigit() or x == "_")
                     break
-        elif literal_type == "OctalLiteral":
+        elif literal_type == TokenKind.OCTAL_LITERAL:
             if is_oct_char(self.current_char):
                 self.advance()
             while self.current_char is not None:
@@ -786,7 +896,7 @@ class Cursor:
                     )
                     self.eat_while(lambda x: x.isdigit() or x == "_")
                     break
-        elif literal_type == "HexadecimalLiteral":
+        elif literal_type == TokenKind.HEXADECIMAL_LITERAL:
             if is_hex_char(self.current_char):
                 self.advance()
             while self.current_char is not None:
@@ -819,10 +929,10 @@ class Cursor:
             elif self.current_char in ("e", "E"):
                 self.consume_decimal_exponent()
             else:
-                return "DecimalLiteral"
+                return TokenKind.DECIMAL_LITERAL
         else:
             raise Exception("Invalid literal.")
-        return "FloatLiteral"
+        return TokenKind.FLOAT_LITERAL
 
     def consume_hexadecimal_number(self) -> str:
         if self.current_char == ".":
@@ -832,11 +942,11 @@ class Cursor:
             if self.current_char == "." and is_hex_char(self.peek()):
                 self.consume_hexadecimal_fraction()
             else:
-                return "HexadecimalLiteral"
+                return TokenKind.HEXADECIMAL_LITERAL
             self.consume_hexadecimal_exponent()
         else:
             raise Exception("Invalid literal.")
-        return "FloatLiteral"
+        return TokenKind.FLOAT_LITERAL
 
     def consume_number(self) -> Token:
         """Handles both integers and floating point numbers, with possible type suffixes."""
@@ -848,11 +958,11 @@ class Cursor:
         # Step 1: Parse prefix
         if self.current_char == "0":
             if self.peek() in ("b", "B"):
-                literal_type = "BinaryLiteral"
+                literal_type = TokenKind.BINARY_LITERAL
                 self.advance()
                 self.advance()
             elif self.peek() in ("o", "O"):
-                literal_type = "OctalLiteral"
+                literal_type = TokenKind.OCTAL_LITERAL
                 self.advance()
                 self.advance()
 
@@ -869,10 +979,10 @@ class Cursor:
 
         # Step3: parse suffix
         if literal_type in [
-            "BinaryLiteral",
-            "OctalLiteral",
-            "DecimalLiteral",
-            "HexadecimalLiteral",
+            TokenKind.BINARY_LITERAL,
+            TokenKind.OCTAL_LITERAL,
+            TokenKind.DECIMAL_LITERAL,
+            TokenKind.HEXADECIMAL_LITERAL,
         ]:
             suffix_pos = self.pos
             if self.current_char in ("i", "u"):
@@ -899,7 +1009,7 @@ class Cursor:
                         LEXICAL_CATEGORY,
                     )
 
-        elif literal_type == "FloatLiteral":
+        elif literal_type == TokenKind.FLOAT_LITERAL:
             suffix_pos = self.pos
             if self.current_char == "f":
                 self.advance()
@@ -961,9 +1071,9 @@ class Cursor:
                 )
 
         if is_raw:
-            token_name = "RAW_IDENTIFIER"
+            token_name = TokenKind.RAW_IDENT
         else:
-            token_name = "IDENTIFIER"
+            token_name = TokenKind.IDENT
         return self.create_token(token_name, id_str, start_pos, self.pos)
 
     def consume_string(self, quote_char, single_char=False, byte_string=False) -> Token:
@@ -973,15 +1083,15 @@ class Cursor:
         if single_char:
             if byte_string:
                 self.advance()  # Move past 'b'
-                token_type = "BYTE_CHARACTER"
+                token_type = TokenKind.BYTE_LITERAL
             else:
-                token_type = "CHARACTER"
+                raise Exception("")
         else:
             if byte_string:
                 self.advance()  # Move past 'b'
-                token_type = "BYTE_STRING"
+                token_type = TokenKind.BYTE_STRING_ARRAY_LITERAL
             else:
-                token_type = "STRING"
+                token_type = TokenKind.LINE_STRING_LITERAL
 
         self.advance()  # Skip the opening quote
 
