@@ -1024,6 +1024,12 @@ class Cursor:
                     string_value += "\n"
                 elif self.current_char == "t":
                     string_value += "\t"
+                elif self.current_char == "0":
+                    string_value += "\0"
+                elif self.current_char == "r":
+                    string_value += "\r"
+                elif self.current_char == "b":
+                   string_value += "\b"
                 else:
                     raise Exception(f"Invalid escape sequence: \\{self.current_char}")
             else:
